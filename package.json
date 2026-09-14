@@ -1,0 +1,20 @@
+{
+  "name": "bot-pequenos-na-fe-whatsapp",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Atendimento do Pequenos na Fé via WhatsApp Web com QR Code, antispam e follow-ups.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "17.4.2",
+    "qrcode-terminal": "0.12.0",
+    "whatsapp-web.js": "1.34.7"
+  }
+}
