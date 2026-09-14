@@ -161,7 +161,7 @@ function markReady(source) {
   console.log(
     config.openAiApiKey
       ? `IA ativa com o modelo ${config.openAiModel}.`
-      : 'IA sem chave: usando respostas prontas seguras.'
+      : '⚠️ IA DESATIVADA: preencha OPENAI_API_KEY no arquivo .env. Usando respostas prontas.'
   );
   followups.start();
 }
