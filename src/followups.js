@@ -90,13 +90,20 @@ class FollowupService {
         const due = pickDueStage(contact, now, this.config.followupStages);
         if (!due) continue;
 
-        // Uma nova mensagem recebida sempre reinicia a sequência. Esta
-        // verificação evita usar um contato alterado durante a varredura.
-        const current = this.store.get(chatId);
-        if (current.sequenceStartedAt !== contact.sequenceStartedAt) continue;
-
+        const sequenceStartedAt = contact.sequenceStartedAt;
         const text = messageForStage(due.stage, this.config);
-        const result = await this.sender.send(chatId, text);
+        const result = await this.sender.send(chatId, text, {
+          beforeSend: () => {
+            const current = this.store.get(chatId);
+            return (
+              !current.optOut &&
+              !current.converted &&
+              current.sequenceStartedAt === sequenceStartedAt &&
+              current.followupStage < due.stage
+            );
+          }
+        });
+
         if (result.sent) {
           this.store.registerFollowup(
             chatId,
