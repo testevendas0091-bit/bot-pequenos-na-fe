@@ -40,6 +40,12 @@ class SafeSender {
         );
       }
 
+      // Revalida o contato imediatamente antes do disparo. Isso impede que
+      // uma resposta/follow-up antigo saia depois de SAIR, compra ou nova mensagem.
+      if (options.beforeSend && !options.beforeSend()) {
+        return { sent: false, reason: 'cancelled-before-send' };
+      }
+
       await this.client.sendMessage(chatId, text);
       const sentAt = Date.now();
       this.lastGlobalSendAt = sentAt;
