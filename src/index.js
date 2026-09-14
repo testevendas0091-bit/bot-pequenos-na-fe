@@ -16,6 +16,8 @@ const inputBuffers = new Map();
 const processedIds = new Set();
 
 let ready = false;
+let authenticatedAt = 0;
+let reconnecting = false;
 let shuttingDown = false;
 
 const client = new Client({
@@ -23,6 +25,15 @@ const client = new Client({
     clientId: config.clientId,
     dataPath: config.sessionPath
   }),
+  takeoverOnConflict: true,
+  takeoverTimeoutMs: 0,
+  authTimeoutMs: 120000,
+  qrMaxRetries: 6,
+  webVersionCache: {
+    type: 'remote',
+    remotePath:
+      'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html'
+  },
   puppeteer: {
     headless: true,
     args: [
@@ -48,7 +59,7 @@ function isPrivateUserMessage(message) {
   const from = String(message.from || '');
   return (
     !message.fromMe &&
-    from.endsWith('@c.us') &&
+    (from.endsWith('@c.us') || from.endsWith('@lid')) &&
     from !== 'status@broadcast' &&
     !from.endsWith('@g.us') &&
     !from.endsWith('@broadcast')
@@ -143,19 +154,33 @@ client.on('qr', (qr) => {
   qrcode.generate(qr, { small: true });
 });
 
-client.on('authenticated', () => {
-  console.log('WhatsApp autenticado. Preparando o atendimento...');
-});
-
-client.on('ready', () => {
+function markReady(source) {
+  if (ready) return;
   ready = true;
-  console.log('✅ Bot Pequenos na Fé conectado e pronto.');
+  console.log(`✅ Bot Pequenos na Fé conectado e pronto. (${source})`);
   console.log(
     config.openAiApiKey
       ? `IA ativa com o modelo ${config.openAiModel}.`
       : 'IA sem chave: usando respostas prontas seguras.'
   );
   followups.start();
+}
+
+client.on('authenticated', () => {
+  authenticatedAt = Date.now();
+  console.log('WhatsApp autenticado. Finalizando o atendimento...');
+  // Algumas versões do WhatsApp Web não emitem "ready", embora já aceitem
+  // mensagens. Não bloqueamos o atendimento só por esse evento.
+  setTimeout(() => {
+    if (!ready && authenticatedAt) markReady('autenticação');
+  }, 10000);
+});
+
+client.on('ready', () => markReady('ready'));
+
+client.on('change_state', (state) => {
+  console.log('Estado do WhatsApp:', state);
+  if (state === 'CONNECTED') markReady('conexão');
 });
 
 client.on('auth_failure', (message) => {
@@ -166,14 +191,14 @@ client.on('disconnected', (reason) => {
   ready = false;
   followups.stop();
   console.error('WhatsApp desconectado:', reason);
-  if (!shuttingDown) {
-    console.error('Reinicie o programa para reconectar.');
-  }
+  authenticatedAt = 0;
+  if (!shuttingDown) reconnectClient();
 });
 
 client.on('message', async (message) => {
   try {
-    if (!ready || !isPrivateUserMessage(message)) return;
+    if (!isPrivateUserMessage(message)) return;
+    if (!ready) markReady('primeira mensagem');
 
     const messageId = message.id?._serialized || message.id?.id;
     if (!rememberMessage(messageId)) return;
@@ -226,6 +251,42 @@ client.on('message', async (message) => {
     console.error('Erro ao processar mensagem:', error.message);
   }
 });
+
+async function reconnectClient() {
+  if (reconnecting || shuttingDown) return;
+  reconnecting = true;
+  console.log('Tentando reconectar automaticamente...');
+  try {
+    await client.destroy().catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await client.initialize();
+  } catch (error) {
+    console.error('Falha ao reconectar:', error.message);
+  } finally {
+    reconnecting = false;
+  }
+}
+
+setInterval(async () => {
+  if (!authenticatedAt || ready || reconnecting || shuttingDown) return;
+  if (Date.now() - authenticatedAt < 30000) return;
+
+  try {
+    const state = await client.getState();
+    console.log('Verificação de conexão:', state || 'sem estado');
+    if (state === 'CONNECTED') {
+      markReady('verificação');
+      return;
+    }
+  } catch (error) {
+    console.error('Conexão ainda não ficou pronta:', error.message);
+  }
+
+  if (Date.now() - authenticatedAt > 120000) {
+    authenticatedAt = 0;
+    reconnectClient();
+  }
+}, 15000).unref?.();
 
 setInterval(() => antiSpam.cleanup(), 30 * 60 * 1000).unref?.();
 
