@@ -93,6 +93,7 @@ async function processBuffered(chatId) {
   const contact = store.get(chatId);
 
   if (contact.optOut || contact.converted) return;
+  const sequenceStartedAt = contact.sequenceStartedAt;
 
   const reply = await generateReply({
     text,
@@ -100,7 +101,16 @@ async function processBuffered(chatId) {
     config
   });
 
-  const result = await sender.send(chatId, reply);
+  const result = await sender.send(chatId, reply, {
+    beforeSend: () => {
+      const current = store.get(chatId);
+      return (
+        !current.optOut &&
+        !current.converted &&
+        current.sequenceStartedAt === sequenceStartedAt
+      );
+    }
+  });
   if (result.sent) {
     store.registerBotReply(chatId, reply, result.sentAt);
     console.log(`Resposta enviada para ${chatId}.`);
