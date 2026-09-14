@@ -5,37 +5,75 @@ function normalize(text) {
     .toLowerCase();
 }
 
-function fallbackReply(text, config) {
+function fallbackReply(text, config, history = []) {
   const value = normalize(text);
+  const previous = (history || [])
+    .slice(-8)
+    .map((item) => normalize(item.content))
+    .join(' ');
 
-  if (/\b(preco|valor|quanto|custa)\b/.test(value)) {
+  if (/\b(link|comprar|compra|checkout|manda o link|envia o link|quero comprar|garantir|pagamento|pix|cartao)\b/.test(value)) {
     return (
-      `O ${config.productName} custa ${config.productPrice}. 😊 ` +
-      `Você recebe o material digital após a confirmação do pagamento: ${config.checkoutUrl}`
+      `Claro! O ${config.productName} custa ${config.productPrice}. 😊\n` +
+      `Você pode comprar por este link seguro: ${config.checkoutUrl}`
     );
   }
 
-  if (/\b(comprar|quero|garantir|pagamento|pix|cartao|checkout)\b/.test(value)) {
+  if (/\b(preco|valor|quanto|custa)\b/.test(value)) {
     return (
-      `Perfeito! O ${config.productName} está disponível por ${config.productPrice}. ` +
-      `Você pode garantir pelo link seguro: ${config.checkoutUrl}`
+      `O ${config.productName} custa ${config.productPrice}. ` +
+      `É um material digital pronto para imprimir. Para comprar: ${config.checkoutUrl}`
     );
   }
 
   if (/\b(recebo|receber|acesso|download|imprimir|digital|entrega)\b/.test(value)) {
     return (
       'O material é digital e pronto para imprimir. ' +
-      `O acesso é enviado após a confirmação do pagamento. Se quiser adquirir: ${config.checkoutUrl}`
+      `O acesso é enviado após a confirmação do pagamento. Link: ${config.checkoutUrl}`
+    );
+  }
+
+  if (/\b(saber mais|sobre o produto|como funciona|o que e|o que vem|atividades)\b/.test(value)) {
+    return (
+      `O ${config.productName} reúne atividades bíblicas infantis digitais prontas para imprimir. ` +
+      'Ele ajuda pais, professores e líderes de igreja a preparar momentos educativos com mais praticidade. ' +
+      'Você pretende usar em casa, na escola ou na igreja?'
+    );
+  }
+
+  if (/\b(casa|filho|filha|mae|pai)\b/.test(value)) {
+    return (
+      'Para usar em casa, o material ajuda a ensinar histórias e princípios bíblicos de forma mais leve e participativa. ' +
+      `Se quiser garantir, o valor é ${config.productPrice}: ${config.checkoutUrl}`
+    );
+  }
+
+  if (/\b(igreja|ministerio|culto|ebd|escola dominical)\b/.test(value)) {
+    return (
+      'Para igreja e ministério infantil, as atividades facilitam a preparação das aulas e ajudam a envolver as crianças. ' +
+      `O material custa ${config.productPrice}: ${config.checkoutUrl}`
+    );
+  }
+
+  if (/\b(escola|professora|professor|turma|alunos|aula)\b/.test(value)) {
+    return (
+      'Para professoras e turmas, o material traz atividades prontas que economizam tempo de preparação e deixam o aprendizado mais interativo. ' +
+      `Quer que eu te envie o link de compra?`
+    );
+  }
+
+  if (/\b(oi|ola|bom dia|boa tarde|boa noite)\b/.test(value) && !previous) {
+    return (
+      `Oi! Eu sou a ${config.botName}, assistente virtual do ${config.productName}. 😊 ` +
+      'Você procura atividades bíblicas para usar em casa, na escola ou na igreja?'
     );
   }
 
   return (
-    `Oi! Eu sou a ${config.botName}, assistente do ${config.productName}. 😊 ` +
-    'É um material de atividades bíblicas infantis pronto para imprimir, pensado para pais, professores e igrejas. ' +
-    'Você quer saber o valor, como recebe ou ver o link para comprar?'
+    'Entendi 😊 Posso te explicar como funciona, o valor, a forma de acesso ou enviar o link de compra. ' +
+    'Qual dessas informações você quer primeiro?'
   );
 }
-
 function extractResponseText(data) {
   if (typeof data.output_text === 'string' && data.output_text.trim()) {
     return data.output_text.trim();
@@ -51,7 +89,7 @@ function extractResponseText(data) {
 }
 
 async function generateReply({ text, history, config }) {
-  if (!config.openAiApiKey) return fallbackReply(text, config);
+  if (!config.openAiApiKey) return fallbackReply(text, config, history);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
@@ -120,10 +158,10 @@ LIMITES OBRIGATÓRIOS
     }
 
     const data = await response.json();
-    return extractResponseText(data) || fallbackReply(text, config);
+    return extractResponseText(data) || fallbackReply(text, config, history);
   } catch (error) {
     console.error('IA indisponível; usando resposta pronta:', error.message);
-    return fallbackReply(text, config);
+    return fallbackReply(text, config, history);
   } finally {
     clearTimeout(timeout);
   }
